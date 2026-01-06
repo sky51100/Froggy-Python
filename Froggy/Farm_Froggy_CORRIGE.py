@@ -128,7 +128,7 @@ def _coro_on_party_wipe(bot: "Botting"):
     fsm = bot.config.FSM
 
     # attendre résurrection
-    while GLOBAL_CACHE.Agent.IsDead(GLOBAL_CACHE.Player.GetAgentID()):
+    while Agent.IsDead(Player.GetAgentID()):
         yield from bot.Wait._coro_for_time(1000)
 
         if not Routines.Checks.Map.MapValid():
@@ -147,7 +147,8 @@ def _coro_on_party_wipe(bot: "Botting"):
 
     # 🔴 POINT CRITIQUE : reset mouvement
     try:
-        bot.Move.Stop()
+        ActionQueueManager().ResetAllQueues()
+
     except Exception:
         pass
 
@@ -156,14 +157,14 @@ def _coro_on_party_wipe(bot: "Botting"):
 
     try:
         if state:
-            Out(f"[RECOVER] Respawn → jump to '{state}'")
+            print(f"[RECOVER] Respawn → jump to '{state}'")
             fsm.jump_to_state_by_name(state)
         else:
-            Out("[RECOVER] Respawn detected but no valid recovery state")
+            print("[RECOVER] Respawn detected but no valid recovery state")
 
         fsm.resume()
     except Exception as e:
-        Out(f"[RECOVER] FSM error: {e}")
+        print(f"[RECOVER] FSM error: {e}")
 
 
 
@@ -207,8 +208,8 @@ DP_REMOVAL_MODELS = [
 
 def RemoveDeathPenaltyIfAny() -> bool:
     try:
-        agent_id = GLOBAL_CACHE.Player.GetAgentID()
-        dp = GLOBAL_CACHE.Agent.GetDeathPenalty(agent_id)
+        agent_id = Player.GetAgentID()
+        dp = Agent.GetDeathPenalty(agent_id)
     except Exception:
         return False
 
@@ -219,10 +220,10 @@ def RemoveDeathPenaltyIfAny() -> bool:
         item_id = Item.GetItemIdFromModelID(model_id)
         if item_id:
             Inventory.UseItem(item_id)
-            Out(f"🧹 Death Penalty removed ({dp}%) using item {model_id}")
+            print(f"🧹 Death Penalty removed ({dp}%) using item {model_id}")
             return True
 
-    Out(f"⚠️ Death Penalty detected ({dp}%) but no DP-removal item available")
+    print(f"⚠️ Death Penalty detected ({dp}%) but no DP-removal item available")
     return False
 
 
@@ -232,28 +233,27 @@ def _take_or_retake_quest(bot: Botting) -> Generator:
     yield from Routines.Yield.wait(800)
     yield
 
+def _wait_end_dungeon() -> Generator:
+    start_map = Map.GetMapID()
+    timeout = time.time() + 150  # 2min30
+
+    while Map.GetMapID() == start_map:
+        if time.time() > timeout:
+            break
+        yield from Routines.Yield.wait(500)
+
+    yield
 
 
 def TakeReward(bot: Botting):
     bot.States.AddHeader("Take Reward")
+
     bot.Move.FollowAutoPath([TEKKS_POS])
-    bot.States.AddCustomState(_reward_quest, "Reward Quest from Tekks")
+    bot.Move.XYAndDialog(12503.0, 22721.0, 0x833907)
 
-def _reward_quest() -> Generator:
-    npc = 0
-    try:
-        npc = Routines.Agents.GetNearestNPC(2000)
-    except Exception:
-        npc = 0
+    # ⏳ attendre la fin du chrono + téléport Sparkfly
+    bot.States.AddCustomState(_wait_end_dungeon, "Wait dungeon end (map change)")
 
-    if npc:
-        Player.Interact(npc, False)
-        yield from Routines.Yield.wait(800)
-        Player.SendChatCommand("dialog reward")
-        yield from Routines.Yield.wait(600)
-        Player.SendChatCommand("dialog take")
-        yield from Routines.Yield.wait(800)
-    yield
 
 
 def _begin_run_stats() -> Generator:
@@ -414,31 +414,31 @@ def _upkeep_multibox_consumables(bot :"Botting"):
         if Routines.Checks.Map.IsOutpost():
             continue
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Essence_Of_Celerity.value, 
-                                            GLOBAL_CACHE.Skill.GetID("Essence_of_Celerity_item_effect"), 0, 0))  
+                                            Skill.GetID("Essence_of_Celerity_item_effect"), 0, 0))  
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Grail_Of_Might.value, 
-                                                GLOBAL_CACHE.Skill.GetID("Grail_of_Might_item_effect"), 0, 0))  
+                                                Skill.GetID("Grail_of_Might_item_effect"), 0, 0))  
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Armor_Of_Salvation.value, 
-                                                GLOBAL_CACHE.Skill.GetID("Armor_of_Salvation_item_effect"), 0, 0))
+                                                Skill.GetID("Armor_of_Salvation_item_effect"), 0, 0))
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Birthday_Cupcake.value, 
-                                                GLOBAL_CACHE.Skill.GetID("Birthday_Cupcake_skill"), 0, 0))  
+                                                Skill.GetID("Birthday_Cupcake_skill"), 0, 0))  
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Golden_Egg.value, 
-                                                GLOBAL_CACHE.Skill.GetID("Golden_Egg_skill"), 0, 0))  
+                                                Skill.GetID("Golden_Egg_skill"), 0, 0))  
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Candy_Corn.value, 
-                                                GLOBAL_CACHE.Skill.GetID("Candy_Corn_skill"), 0, 0))  
+                                                Skill.GetID("Candy_Corn_skill"), 0, 0))  
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Candy_Apple.value, 
-                                                GLOBAL_CACHE.Skill.GetID("Candy_Apple_skill"), 0, 0))  
+                                                Skill.GetID("Candy_Apple_skill"), 0, 0))  
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Slice_Of_Pumpkin_Pie.value, 
-                                                GLOBAL_CACHE.Skill.GetID("Pie_Induced_Ecstasy"), 0, 0))    
+                                                Skill.GetID("Pie_Induced_Ecstasy"), 0, 0))    
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Drake_Kabob.value, 
-                                                GLOBAL_CACHE.Skill.GetID("Drake_Skin"), 0, 0))  
+                                                Skill.GetID("Drake_Skin"), 0, 0))  
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Bowl_Of_Skalefin_Soup.value, 
-                                                GLOBAL_CACHE.Skill.GetID("Skale_Vigor"), 0, 0))  
+                                                Skill.GetID("Skale_Vigor"), 0, 0))  
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.Pahnai_Salad.value, 
-                                                GLOBAL_CACHE.Skill.GetID("Pahnai_Salad_item_effect"), 0, 0))  
+                                                Skill.GetID("Pahnai_Salad_item_effect"), 0, 0))  
         yield from bot.helpers.Multibox._use_consumable_message((ModelID.War_Supplies.value, 
-                                                                GLOBAL_CACHE.Skill.GetID("Well_Supplied"), 0, 0))
+                                                                Skill.GetID("Well_Supplied"), 0, 0))
         for i in range(1, 5): 
-            GLOBAL_CACHE.Inventory.UseItem(ModelID.Honeycomb.value)
+            Inventory.UseItem(ModelID.Honeycomb.value)
             yield from bot.Wait._coro_for_time(250)
 
 def _apply_game_mode() -> Generator:
@@ -453,8 +453,12 @@ def Setup(bot: Botting):
     bot.States.AddHeader("Setup")
     bot.Map.Travel(target_map_id=MAP_GADDS_ENCAMPMENT)
     bot.Wait.UntilOnOutpost()
-bot.States.AddCustomState(_apply_game_mode, "Apply Game Mode")
+    bot.States.AddCustomState(_apply_game_mode, "Apply Game Mode")
+
     
+def _end_of_run_pause():
+    yield from Routines.Yield.wait(500)
+    yield
 
 
 
@@ -464,6 +468,15 @@ def Go_Out(bot: Botting):
     bot.Move.XYAndDialog (-8950, -19843, 0x84)
     bot.States.AddCustomState(lambda: PopLegionnary(), "Pop")
   
+def ScheduleNextRun():
+    print("🔁 Restarting full routine")
+    yield from Routines.Yield.wait(1000)
+
+    ActionQueueManager().ResetAllQueues()  # 🔥 CRITIQUE
+    create_bot_routine(bot)
+
+    yield
+
 
 
 # ---------------------------------------------------------------------------
@@ -484,22 +497,13 @@ def create_bot_routine(bot: Botting) -> None:
     SecondLevel(bot)
     TakeReward(bot)
     bot.States.AddCustomState(lambda: _end_run_stats(True), "End Run")
+    bot.States.AddHeader("Loop: restart routine")
+    bot.States.AddCustomState(ScheduleNextRun, "Schedule next run")
     TakeQuestandEnter(bot)
 
-    # 🔁 retour au début de la loop
-    bot.States.AddCustomState(lambda: _loop_farm(bot), "Loop Farm")
 
 
-def _loop_farm(bot: Botting):
-    yield from Routines.Yield.wait(1000)
 
-    fsm = bot.config.FSM
-    bot.Move.Stop()  # sécurité mouvement
-
-    fsm.jump_to_state_by_name("[LOOP] Farm Start")
-    fsm.resume()
-
-    yield
 
 
 def EnterDungeon(bot: Botting):
@@ -530,7 +534,13 @@ def FirstLevel(bot: Botting):
     follow_and_bless(path_segment_0)
     if SET.use_conset_stage1 == True:
         bot.Multibox.UseAllConsumables()
-        bot.States.AddManagedCoroutine("Upkeep Multibox Consumables", lambda: _upkeep_multibox_consumables(bot))
+if not getattr(bot, "_upkeep_running", False):
+    setattr(bot, "_upkeep_running", True)
+    bot.States.AddManagedCoroutine(
+        "Upkeep Multibox Consumables",
+        lambda: _upkeep_multibox_consumables(bot)
+    )
+
 
     if SET.use_summon_stage1 == True:
         bot.States.AddCustomState(lambda: PopLegionnary(), "Pop")
@@ -564,8 +574,6 @@ def FirstLevel(bot: Botting):
 
     bot.Templates.Multibox_Aggressive()
     bot.Move.FollowAutoPath(path2_part1)
-
-    # 🔥 point clé : attendre la fin du combat
     bot.Wait.UntilOutOfCombat()
 
     bot.Move.FollowAutoPath(path2_part2)
@@ -706,6 +714,9 @@ def SecondLevel(bot: Botting):
     # =========================
     # Approche du coffre Bogroot
     bot.Interact.WithGadgetAtXY(14982.66, -19122)
+# fin de run, plus d'ennemis
+    yield from Routines.Yield.wait(500)
+
 
 
 def TakeQuestandEnter(bot: Botting):
