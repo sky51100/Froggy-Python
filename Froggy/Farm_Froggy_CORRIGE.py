@@ -6,6 +6,7 @@ from typing import Generator, List, Tuple, Optional
 
 import PyImGui as ImGui
 from Py4GWCoreLib import *
+from Widgets.CustomBehaviors.gui import party
 
 MODULE_NAME = "Farm_Froggy"
 
@@ -68,11 +69,11 @@ STATS = _Stats()
 
 class _Settings:
     def __init__(self):
-        self.difficulty = 0  # 0 NM / 1 HM
-        self.use_summon_stage1 = True
-        self.use_summon_stage2 = True
+        self.hard_mode = False
+        self.use_summon_stage1 = False
+        self.use_summon_stage2 = False
         self.use_conset_stage1 = False
-        self.use_conset_stage2 = True
+        self.use_conset_stage2 = False
 
 SET = _Settings()
 
@@ -307,10 +308,29 @@ def _draw_texture():
 def _draw_settings(bot: Botting):
     ImGui.separator()
     ImGui.text("Consumables")
-    SET.use_summon_stage1 = ImGui.checkbox("Use Summoning Stone - Stage 1", SET.use_summon_stage1)
-    SET.use_summon_stage2 = ImGui.checkbox("Use Summoning Stone - Stage 2", SET.use_summon_stage2)
-    SET.use_conset_stage1 = ImGui.checkbox("Use Conset - Stage 1", SET.use_conset_stage1)
-    SET.use_conset_stage2 = ImGui.checkbox("Use Conset - Stage 2", SET.use_conset_stage2)
+
+    SET.hard_mode = ImGui.checkbox(
+        "Hard Mode",
+        SET.hard_mode
+    )
+
+    SET.use_summon_stage1 = ImGui.checkbox(
+        "Use Summoning Stone - Stage 1",
+        SET.use_summon_stage1
+    )
+    SET.use_summon_stage2 = ImGui.checkbox(
+        "Use Summoning Stone - Stage 2",
+        SET.use_summon_stage2
+    )
+    SET.use_conset_stage1 = ImGui.checkbox(
+        "Use Conset - Stage 1",
+        SET.use_conset_stage1
+    )
+    SET.use_conset_stage2 = ImGui.checkbox(
+        "Use Conset - Stage 2",
+        SET.use_conset_stage2
+    )
+
 
     ImGui.separator()
 
@@ -421,14 +441,20 @@ def _upkeep_multibox_consumables(bot :"Botting"):
             GLOBAL_CACHE.Inventory.UseItem(ModelID.Honeycomb.value)
             yield from bot.Wait._coro_for_time(250)
 
+def _apply_game_mode() -> Generator:
+    if SET.hard_mode == True :
+        Party.SetHardMode()
+    else:
+        Party.SetNormalMode()
+    yield
+
 
 def Setup(bot: Botting):
     bot.States.AddHeader("Setup")
     bot.Map.Travel(target_map_id=MAP_GADDS_ENCAMPMENT)
     bot.Wait.UntilOnOutpost()
-    bot.Party.SetHardMode(True)
+bot.States.AddCustomState(_apply_game_mode, "Apply Game Mode")
     
-
 
 
 
@@ -502,11 +528,12 @@ def FirstLevel(bot: Botting):
         (19045.95, 7877.0),  # bénédiction ici
     ]
     follow_and_bless(path_segment_0)
-    
-    bot.Multibox.UseAllConsumables()
-    bot.States.AddManagedCoroutine("Upkeep Multibox Consumables", lambda: _upkeep_multibox_consumables(bot))
+    if SET.use_conset_stage1 == True:
+        bot.Multibox.UseAllConsumables()
+        bot.States.AddManagedCoroutine("Upkeep Multibox Consumables", lambda: _upkeep_multibox_consumables(bot))
 
-
+    if SET.use_summon_stage1 == True:
+        bot.States.AddCustomState(lambda: PopLegionnary(), "Pop")
     # =========================
     # Segment 1 — Après bénédiction #0 → bénédiction #1
     # =========================
@@ -562,9 +589,12 @@ def SecondLevel(bot: Botting):
         (-11055.0, -5551.0),  # bénédiction ici
     ]
     follow_and_bless(path_segment_0)
-    bot.Multibox.UseAllConsumables()
-    bot.States.AddManagedCoroutine("Upkeep Multibox Consumables", lambda: _upkeep_multibox_consumables(bot))
-    bot.States.AddCustomState(lambda: PopLegionnary(), "Pop")
+    if SET.use_conset_stage2 == True:
+        bot.Multibox.UseAllConsumables()
+        bot.States.AddManagedCoroutine("Upkeep Multibox Consumables", lambda: _upkeep_multibox_consumables(bot))
+
+    if SET.use_summon_stage1 == True:    
+        bot.States.AddCustomState(lambda: PopLegionnary(), "Pop")
 
     # =========================
     # Segment 1 — Nettoyage première salle → bénédiction
@@ -680,7 +710,10 @@ def SecondLevel(bot: Botting):
 
 def TakeQuestandEnter(bot: Botting):
     bot.States.AddHeader("Re-take quest")
-    bot.States.AddCustomState(_take_or_retake_quest, "Take/retake quest (Tekks)")
+    bot.States.AddCustomState(
+    lambda: _take_or_retake_quest(bot),
+    "Take/retake quest (Tekks)"
+)
     bot.States.AddHeader("Next Run - Enter Dungeon")
     path = [ (11676.01, 22685.0),(11562.77, 24059.0),(13097.0, 26393.0)]
     bot.Templates.Multibox_Aggressive()
@@ -711,7 +744,9 @@ def Sparkly(bot: Botting):
     (12481.0, 14496.0),
     (13080.0, 16405.0),
     (13487.0, 18372.0),
-    (13476.0, 20370.0),  ]
+    (13476.0, 20370.0),
+    (12503.0, 22721.0),
+    ]
     
     bot.Templates.Multibox_Aggressive()
     bot.Move.FollowAutoPath(path)
@@ -720,7 +755,11 @@ def Sparkly(bot: Botting):
     x, y = path[-1]
     bot.Dialogs.AtXY(x, y, DWARVEN_BLESSING_DIALOG, "Get Blessing")
     # --- Tekks ---
-    bot.States.AddCustomState(_take_or_retake_quest, "Take/retake quest (Tekks)")
+    bot.States.AddCustomState(
+    lambda: _take_or_retake_quest(bot),
+    "Take/retake quest (Tekks)"
+)
+
 
 bot.SetMainRoutine(create_bot_routine)
 
