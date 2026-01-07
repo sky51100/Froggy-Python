@@ -71,11 +71,13 @@ class _Settings:
     def __init__(self):
         self.hard_mode = False
         self.use_summon_stage1 = False
-        self.use_summon_stage2 = False
+        self.use_summon_stage2 = True
         self.use_conset_stage1 = False
-        self.use_conset_stage2 = False
+        self.use_conset_stage2 = True
 
 SET = _Settings()
+SCRIPT_RUNNING = False
+
 
 # ---------------------------------------------------------------------------
 # Death / wipe handling (Qinkai-style)
@@ -208,8 +210,7 @@ DP_REMOVAL_MODELS = [
 
 def RemoveDeathPenaltyIfAny() -> bool:
     try:
-        agent_id = Player.GetAgentID()
-        dp = Agent.GetDeathPenalty(agent_id)
+        dp = Player.GetDeathPenalty()
     except Exception:
         return False
 
@@ -309,27 +310,35 @@ def _draw_settings(bot: Botting):
     ImGui.separator()
     ImGui.text("Consumables")
 
-    SET.hard_mode = ImGui.checkbox(
-        "Hard Mode",
-        SET.hard_mode
-    )
+    if SCRIPT_RUNNING:
+        # 🔒 Script en cours : affichage lecture seule
+        ImGui.checkbox("Hard Mode", SET.hard_mode)
+        ImGui.checkbox("Use Summoning Stone - Stage 1", SET.use_summon_stage1)
+        ImGui.checkbox("Use Summoning Stone - Stage 2", SET.use_summon_stage2)
+        ImGui.checkbox("Use Conset - Stage 1", SET.use_conset_stage1)
+        ImGui.checkbox("Use Conset - Stage 2", SET.use_conset_stage2)
 
-    SET.use_summon_stage1 = ImGui.checkbox(
-        "Use Summoning Stone - Stage 1",
-        SET.use_summon_stage1
-    )
-    SET.use_summon_stage2 = ImGui.checkbox(
-        "Use Summoning Stone - Stage 2",
-        SET.use_summon_stage2
-    )
-    SET.use_conset_stage1 = ImGui.checkbox(
-        "Use Conset - Stage 1",
-        SET.use_conset_stage1
-    )
-    SET.use_conset_stage2 = ImGui.checkbox(
-        "Use Conset - Stage 2",
-        SET.use_conset_stage2
-    )
+        ImGui.text_disabled("🔒 Settings locked while script is running")
+    else:
+        # 🟢 Script arrêté : modifiable
+        SET.hard_mode = ImGui.checkbox("Hard Mode", SET.hard_mode)
+        SET.use_summon_stage1 = ImGui.checkbox(
+            "Use Summoning Stone - Stage 1",
+            SET.use_summon_stage1
+        )
+        SET.use_summon_stage2 = ImGui.checkbox(
+            "Use Summoning Stone - Stage 2",
+            SET.use_summon_stage2
+        )
+        SET.use_conset_stage1 = ImGui.checkbox(
+            "Use Conset - Stage 1",
+            SET.use_conset_stage1
+        )
+        SET.use_conset_stage2 = ImGui.checkbox(
+            "Use Conset - Stage 2",
+            SET.use_conset_stage2
+        )
+
 
 
     ImGui.separator()
@@ -338,7 +347,6 @@ def _draw_settings(bot: Botting):
     session_s = int(now - STATS.session_start)
     run_s = int(now - STATS.current_run_start) if STATS.current_run_start else 0
 
-    # refresh counter (cheap)
     try:
         STATS.froggy_total = _scan_froggy_total()
     except Exception:
@@ -355,6 +363,7 @@ def _draw_settings(bot: Botting):
     if STATS.success > 0:
         avg = int(round(STATS.total_s / STATS.success))
         ImGui.text(f"Average: {avg}s")
+
 
 # ---------------------------------------------------------------------------
 # Bot instance (global)
@@ -405,41 +414,6 @@ def PopLegionnary():
     if stone_id and not has_effect and cast_imp:
         Inventory.UseItem(stone_id)
 
-def _upkeep_multibox_consumables(bot :"Botting"):
-    while True:
-        yield from bot.Wait._coro_for_time(15000)
-        if not Routines.Checks.Map.MapValid():
-            continue
-        
-        if Routines.Checks.Map.IsOutpost():
-            continue
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Essence_Of_Celerity.value, 
-                                            Skill.GetID("Essence_of_Celerity_item_effect"), 0, 0))  
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Grail_Of_Might.value, 
-                                                Skill.GetID("Grail_of_Might_item_effect"), 0, 0))  
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Armor_Of_Salvation.value, 
-                                                Skill.GetID("Armor_of_Salvation_item_effect"), 0, 0))
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Birthday_Cupcake.value, 
-                                                Skill.GetID("Birthday_Cupcake_skill"), 0, 0))  
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Golden_Egg.value, 
-                                                Skill.GetID("Golden_Egg_skill"), 0, 0))  
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Candy_Corn.value, 
-                                                Skill.GetID("Candy_Corn_skill"), 0, 0))  
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Candy_Apple.value, 
-                                                Skill.GetID("Candy_Apple_skill"), 0, 0))  
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Slice_Of_Pumpkin_Pie.value, 
-                                                Skill.GetID("Pie_Induced_Ecstasy"), 0, 0))    
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Drake_Kabob.value, 
-                                                Skill.GetID("Drake_Skin"), 0, 0))  
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Bowl_Of_Skalefin_Soup.value, 
-                                                Skill.GetID("Skale_Vigor"), 0, 0))  
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.Pahnai_Salad.value, 
-                                                Skill.GetID("Pahnai_Salad_item_effect"), 0, 0))  
-        yield from bot.helpers.Multibox._use_consumable_message((ModelID.War_Supplies.value, 
-                                                                Skill.GetID("Well_Supplied"), 0, 0))
-        for i in range(1, 5): 
-            Inventory.UseItem(ModelID.Honeycomb.value)
-            yield from bot.Wait._coro_for_time(250)
 
 def _apply_game_mode() -> Generator:
     if SET.hard_mode == True :
@@ -455,6 +429,8 @@ def Setup(bot: Botting):
     bot.Wait.UntilOnOutpost()
     bot.States.AddCustomState(_apply_game_mode, "Apply Game Mode")
 
+
+
     
 def _end_of_run_pause():
     yield from Routines.Yield.wait(500)
@@ -466,28 +442,37 @@ def Go_Out(bot: Botting):
     bot.Move.XY(-9451.37, -19766.40)
     bot.Wait.UntilOnExplorable()
     bot.Move.XYAndDialog (-8950, -19843, 0x84)
-    bot.States.AddCustomState(lambda: PopLegionnary(), "Pop")
   
 def ScheduleNextRun():
-    print("🔁 Restarting full routine")
     yield from Routines.Yield.wait(1000)
 
-    ActionQueueManager().ResetAllQueues()  # 🔥 CRITIQUE
+    ActionQueueManager().ResetAllQueues()
+    bot.config.FSM.clear()          # 🔥 MANQUANT
     create_bot_routine(bot)
+    bot.config.FSM.resume()
 
     yield
 
+
+
+def _on_script_start() -> Generator:
+    global SCRIPT_RUNNING
+    SCRIPT_RUNNING = True
+    yield
 
 
 # ---------------------------------------------------------------------------
 # Main Routine builder
 # ---------------------------------------------------------------------------
 def create_bot_routine(bot: Botting) -> None:
-    InitializeBot(bot)
+    bot.States.AddHeader("Start")
+    bot.States.AddCustomState(_on_script_start, "Lock UI")
+
     Setup(bot)
     Go_Out(bot)
     Sparkly(bot)
     EnterDungeon(bot)
+
 
     # 🔁 POINT DE LOOP
     bot.States.AddHeader("[LOOP] Farm Start")
@@ -497,9 +482,40 @@ def create_bot_routine(bot: Botting) -> None:
     SecondLevel(bot)
     TakeReward(bot)
     bot.States.AddCustomState(lambda: _end_run_stats(True), "End Run")
+    TakeQuestandEnter(bot)
+
     bot.States.AddHeader("Loop: restart routine")
     bot.States.AddCustomState(ScheduleNextRun, "Schedule next run")
-    TakeQuestandEnter(bot)
+
+
+
+def _maybe_use_conset_stage1(bot: Botting) -> Generator:
+    if SET.use_conset_stage1:
+        bot.Multibox.UseAllConsumables()
+    yield
+
+
+
+
+def _maybe_use_summon_stage2(bot: Botting) -> Generator:
+    if SET.use_summon_stage2:
+        PopLegionnary()
+    yield
+
+
+
+def _maybe_use_summon_stage1(bot: Botting) -> Generator:
+    if SET.use_summon_stage1:
+        PopLegionnary()
+    yield
+
+
+
+def _maybe_use_conset_stage2(bot: Botting) -> Generator:
+    if SET.use_conset_stage2:
+        bot.Multibox.UseAllConsumables()
+    yield
+
 
 
 
@@ -517,37 +533,32 @@ def EnterDungeon(bot: Botting):
 def FirstLevel(bot: Botting):
     bot.States.AddHeader("First Level")
 
+    # 🔹 Consommables / Summon (toujours présents)
+    bot.States.AddCustomState(
+     _maybe_use_conset_stage1,
+    "Stage 1 – Conset (conditional)"
+)
+
+    bot.States.AddCustomState(
+     _maybe_use_summon_stage1,
+    "Stage 1 – Legionnaire (conditional)"
+    )
     def follow_and_bless(path):
         bot.Templates.Multibox_Aggressive()
         bot.Move.FollowAutoPath(path)
         bot.Wait.UntilOutOfCombat()
         x, y = path[-1]
         bot.Dialogs.AtXY(x, y, DWARVEN_BLESSING_DIALOG, "Get Blessing")
-    bot.States.AddCustomState(lambda: PopLegionnary(), "Pop")
-    # =========================
-    # Segment 0 — Départ → 1ʳᵉ bénédiction naine
-    # =========================
-    path_segment_0 = [
+
+    # --- Segment 0
+    follow_and_bless([
         (18092.0, 4315.0),
-        (19045.95, 7877.0),  # bénédiction ici
-    ]
-    follow_and_bless(path_segment_0)
-    if SET.use_conset_stage1 == True:
-        bot.Multibox.UseAllConsumables()
-if not getattr(bot, "_upkeep_running", False):
-    setattr(bot, "_upkeep_running", True)
-    bot.States.AddManagedCoroutine(
-        "Upkeep Multibox Consumables",
-        lambda: _upkeep_multibox_consumables(bot)
-    )
+        (19045.95, 7877.0),
+    ])
 
-
-    if SET.use_summon_stage1 == True:
-        bot.States.AddCustomState(lambda: PopLegionnary(), "Pop")
-    # =========================
-    # Segment 1 — Après bénédiction #0 → bénédiction #1
-    # =========================
-    path2_part1 = [
+    # --- Segment 1 (split wait)
+    bot.Templates.Multibox_Aggressive()
+    bot.Move.FollowAutoPath([
         (16541.48, 8558.94),
         (13038.90, 7792.40),
         (11666.15, 6464.53),
@@ -555,10 +566,11 @@ if not getattr(bot, "_upkeep_running", False):
         (10355.79, 8499.42),
         (6491.41, 5310.56),
         (5097.64, 2204.33),
-        (1228.15, 54.49),  # point d'attente / aggro
-    ]
+        (1228.15, 54.49),
+    ])
+    bot.Wait.UntilOutOfCombat()
 
-    path2_part2 = [
+    bot.Move.FollowAutoPath([
         (141.23, -1965.14),
         (-1545.98, -5826.18),
         (-269.32, -8533.17),
@@ -570,18 +582,24 @@ if not getattr(bot, "_upkeep_running", False):
         (1579.39, -14311.38),
         (7319.99, -17202.99),
         (7865, -19350),
-    ]
-
-    bot.Templates.Multibox_Aggressive()
-    bot.Move.FollowAutoPath(path2_part1)
-    bot.Wait.UntilOutOfCombat()
-
-    bot.Move.FollowAutoPath(path2_part2)
+    ])
     bot.Wait.UntilOutOfCombat()
 
 
 def SecondLevel(bot: Botting):
-    bot.States.AddHeader("Second Stage")
+    bot.States.AddHeader("Second Level")
+
+    # 🔹 Consommables / Summon (toujours présents)
+    bot.States.AddCustomState(
+    _maybe_use_conset_stage2,
+    "Stage 2 – Conset (conditional)"
+)
+
+    bot.States.AddCustomState(
+    _maybe_use_summon_stage2,
+    "Stage 2 – Legionnaire (conditional)"
+)
+
 
     def follow_and_bless(path):
         bot.Templates.Multibox_Aggressive()
@@ -590,24 +608,11 @@ def SecondLevel(bot: Botting):
         x, y = path[-1]
         bot.Dialogs.AtXY(x, y, DWARVEN_BLESSING_DIALOG, "Get Blessing")
 
-    # =========================
-    # Segment 0 — Arrivée Level 2 → Bénédiction naine
-    # =========================
-    path_segment_0 = [
-        (-11055.0, -5551.0),  # bénédiction ici
-    ]
-    follow_and_bless(path_segment_0)
-    if SET.use_conset_stage2 == True:
-        bot.Multibox.UseAllConsumables()
-        bot.States.AddManagedCoroutine("Upkeep Multibox Consumables", lambda: _upkeep_multibox_consumables(bot))
+    # --- Segment 0
+    follow_and_bless([(-11055.0, -5551.0)])
 
-    if SET.use_summon_stage1 == True:    
-        bot.States.AddCustomState(lambda: PopLegionnary(), "Pop")
-
-    # =========================
-    # Segment 1 — Nettoyage première salle → bénédiction
-    # =========================
-    path_segment_1 = [
+    # --- Segment 1
+    follow_and_bless([
         (-11522.0, -3486.0),
         (-10639.0, -4076.0),
         (-11321.0, -5033.0),
@@ -628,9 +633,8 @@ def SecondLevel(bot: Botting):
         (-3627.0, 8933.0),
         (-3014.0, 10554.0),
         (-1604.0, 11789.0),
-        (-955.0, 10984.0),  # bénédiction ici
-    ]
-    follow_and_bless(path_segment_1)
+        (-955.0, 10984.0),
+    ])
 
     # =========================
     # Segment 2 — Progression → Patriarch → bénédiction
@@ -714,8 +718,6 @@ def SecondLevel(bot: Botting):
     # =========================
     # Approche du coffre Bogroot
     bot.Interact.WithGadgetAtXY(14982.66, -19122)
-# fin de run, plus d'ennemis
-    yield from Routines.Yield.wait(500)
 
 
 
@@ -773,6 +775,7 @@ def Sparkly(bot: Botting):
 
 
 bot.SetMainRoutine(create_bot_routine)
+InitializeBot(bot)
 
 # ---------------------------------------------------------------------------
 # Main loop
