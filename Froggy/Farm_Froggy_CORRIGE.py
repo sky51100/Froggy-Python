@@ -1,12 +1,24 @@
+
 from __future__ import annotations
 from Py4GWCoreLib import (Routines,Botting,ActionQueueManager)
 import os
 import time
 from typing import Generator, List, Tuple, Optional
+from collections import deque
+
+LOG_BUFFER = deque(maxlen=200)  # 200 lignes max
 
 import PyImGui as ImGui
 from Py4GWCoreLib import *
 from Widgets.CustomBehaviors.gui import party
+
+import time
+
+def Log(msg: str):
+    t = time.strftime("%H:%M:%S")
+    LOG_BUFFER.append(f"[{t}] {msg}")
+
+
 
 MODULE_NAME = "Farm_Froggy"
 
@@ -48,7 +60,7 @@ FROGGY_SCEPTER_MODELS = [
 
 BOSS_DOOR_POS = (17922.0, -6241.0)
 CHEST_POS = (14982.66, -19122.0)
-TEKKS_POS = (14497.64, -17438.0)
+TEKKS_POS = (14067.01, -17253.24)
 
 # ---------------------------------------------------------------------------
 # Runtime stats / UI state
@@ -70,9 +82,9 @@ STATS = _Stats()
 class _Settings:
     def __init__(self):
         self.hard_mode = False
-        self.use_summon_stage1 = False
+        self.use_summon_stage1 = True
         self.use_summon_stage2 = True
-        self.use_conset_stage1 = False
+        self.use_conset_stage1 = True
         self.use_conset_stage2 = True
 
 SET = _Settings()
@@ -159,15 +171,14 @@ def _coro_on_party_wipe(bot: "Botting"):
 
     try:
         if state:
-            print(f"[RECOVER] Respawn → jump to '{state}'")
+            Log(f"[RECOVER] Respawn → jump to '{state}'")
             fsm.jump_to_state_by_name(state)
         else:
-            print("[RECOVER] Respawn detected but no valid recovery state")
+            Log("[RECOVER] Respawn detected but no valid recovery state")
 
         fsm.resume()
     except Exception as e:
-        print(f"[RECOVER] FSM error: {e}")
-
+        Log(f"[RECOVER] FSM error: {e}")
 
 
 
@@ -221,18 +232,30 @@ def RemoveDeathPenaltyIfAny() -> bool:
         item_id = Item.GetItemIdFromModelID(model_id)
         if item_id:
             Inventory.UseItem(item_id)
-            print(f"🧹 Death Penalty removed ({dp}%) using item {model_id}")
+            Log(f"🧹 Death Penalty removed ({dp}%) using item {model_id}")
             return True
 
-    print(f"⚠️ Death Penalty detected ({dp}%) but no DP-removal item available")
+    Log(f"⚠️ Death Penalty detected ({dp}%) but no DP-removal item available")
     return False
 
 
 
-def _take_or_retake_quest(bot: Botting) -> Generator:
-    bot.Move.XYAndDialog(12503.0, 22721.0, 0x833901)
-    yield from Routines.Yield.wait(800)
+def _take_quest(bot: Botting) -> Generator:
+    # chercher le NPC le plus proche (Tekks)
+    npc = Routines.Agents.GetNearestNPC(2000)
+
+    if npc:
+        Player.Interact(npc, False)
+        yield from Routines.Yield.wait(500)
+
+        # prise de quête
+        Player.SendChatCommand("dialog 0x833901")
+        yield from Routines.Yield.wait(500)
+    else:
+        Log("⚠️ Tekks not found for quest pickup")
+
     yield
+
 
 def _wait_end_dungeon() -> Generator:
     start_map = Map.GetMapID()
@@ -249,11 +272,25 @@ def _wait_end_dungeon() -> Generator:
 def TakeReward(bot: Botting):
     bot.States.AddHeader("Take Reward")
 
+    # Aller dans la zone de Tekks
     bot.Move.FollowAutoPath([TEKKS_POS])
-    bot.Move.XYAndDialog(12503.0, 22721.0, 0x833907)
+    _talk_to_tekks()
+
+# Interagir avec Tekks (NPC le plus proche)
+def _talk_to_tekks() -> Generator:
+    npc = Routines.Agents.GetNearestNPC(2000)
+    if npc:
+        Player.Interact(npc, False)
+        yield from Routines.Yield.wait(500)
+        Player.SendChatCommand("dialog 0x833907")
+        yield from Routines.Yield.wait(500)
+    yield
+
+    bot.States.AddCustomState(_talk_to_tekks, "Talk to Tekks")
 
     # ⏳ attendre la fin du chrono + téléport Sparkfly
     bot.States.AddCustomState(_wait_end_dungeon, "Wait dungeon end (map change)")
+
 
 
 
@@ -310,31 +347,22 @@ def _draw_settings(bot: Botting):
     ImGui.separator()
     ImGui.text("Consumables")
 
-    if SCRIPT_RUNNING:
-        # 🔒 Script en cours : affichage lecture seule
-        ImGui.checkbox("Hard Mode", SET.hard_mode)
-        ImGui.checkbox("Use Summoning Stone - Stage 1", SET.use_summon_stage1)
-        ImGui.checkbox("Use Summoning Stone - Stage 2", SET.use_summon_stage2)
-        ImGui.checkbox("Use Conset - Stage 1", SET.use_conset_stage1)
-        ImGui.checkbox("Use Conset - Stage 2", SET.use_conset_stage2)
-
-        ImGui.text_disabled("🔒 Settings locked while script is running")
-    else:
         # 🟢 Script arrêté : modifiable
-        SET.hard_mode = ImGui.checkbox("Hard Mode", SET.hard_mode)
-        SET.use_summon_stage1 = ImGui.checkbox(
+    SET.hard_mode = ImGui.checkbox("Hard Mode", SET.hard_mode)
+
+    SET.use_summon_stage1 = ImGui.checkbox(
             "Use Summoning Stone - Stage 1",
             SET.use_summon_stage1
         )
-        SET.use_summon_stage2 = ImGui.checkbox(
+    SET.use_summon_stage2 = ImGui.checkbox(
             "Use Summoning Stone - Stage 2",
             SET.use_summon_stage2
         )
-        SET.use_conset_stage1 = ImGui.checkbox(
+    SET.use_conset_stage1 = ImGui.checkbox(
             "Use Conset - Stage 1",
             SET.use_conset_stage1
         )
-        SET.use_conset_stage2 = ImGui.checkbox(
+    SET.use_conset_stage2 = ImGui.checkbox(
             "Use Conset - Stage 2",
             SET.use_conset_stage2
         )
@@ -363,6 +391,17 @@ def _draw_settings(bot: Botting):
     if STATS.success > 0:
         avg = int(round(STATS.total_s / STATS.success))
         ImGui.text(f"Average: {avg}s")
+
+    ImGui.separator()
+    ImGui.text("Logs")
+
+    ImGui.begin_child("LogWindow", [0.0, 150.0], True)
+
+    for line in LOG_BUFFER:
+       ImGui.text(line)
+
+    ImGui.end_child()
+
 
 
 # ---------------------------------------------------------------------------
@@ -443,16 +482,6 @@ def Go_Out(bot: Botting):
     bot.Wait.UntilOnExplorable()
     bot.Move.XYAndDialog (-8950, -19843, 0x84)
   
-def ScheduleNextRun():
-    yield from Routines.Yield.wait(1000)
-
-    ActionQueueManager().ResetAllQueues()
-    bot.config.FSM.clear()          # 🔥 MANQUANT
-    create_bot_routine(bot)
-    bot.config.FSM.resume()
-
-    yield
-
 
 
 def _on_script_start() -> Generator:
@@ -460,6 +489,52 @@ def _on_script_start() -> Generator:
     SCRIPT_RUNNING = True
     yield
 
+def _loop_dungeon_cycle(bot: Botting) -> Generator:
+    yield from Routines.Yield.wait(1000)
+
+    # sécurité
+    ActionQueueManager().ResetAllQueues()
+
+    # 🔁 retour au début du cycle
+    bot.config.FSM.jump_to_state_by_name("[LOOP] Dungeon Cycle Start")
+
+    yield
+
+def _use_conset() -> Generator:
+    Log("Conset: executing UseAllConsumables()")
+    bot.Multibox.UseAllConsumables()
+    yield
+
+
+def _maybe_use_summon_stage2() -> Generator:
+    if SET.use_summon_stage2 == True :
+ 
+        PopLegionnary()
+        Log("Stone Stage 2: Legionnary Summon USED")    
+    yield
+
+def _maybe_use_summon_stage1() -> Generator:
+    if SET.use_summon_stage1 == True :
+        PopLegionnary()
+        Log("Stone Stage 1: Legionnary Summon USED")
+    
+    yield
+
+def _maybe_use_conset_stage1() -> Generator:
+    if SET.use_conset_stage1:
+        Log("Conset Stage 1: USED")
+        yield from _use_conset()
+    else:
+        Log("Conset Stage 1: SKIPPED")
+    yield
+
+
+
+def _maybe_use_conset_stage2() -> Generator:
+    if SET.use_conset_stage2 == True :
+        Log("Conset Stage 2: USED (direct inventory)")
+        bot.Multibox.UseAllConsumables()
+    yield
 
 # ---------------------------------------------------------------------------
 # Main Routine builder
@@ -484,43 +559,12 @@ def create_bot_routine(bot: Botting) -> None:
     bot.States.AddCustomState(lambda: _end_run_stats(True), "End Run")
     TakeQuestandEnter(bot)
 
-    bot.States.AddHeader("Loop: restart routine")
-    bot.States.AddCustomState(ScheduleNextRun, "Schedule next run")
+    # 🔁 POINT DE LOOP
+    bot.States.AddHeader("[LOOP] Dungeon Cycle Start")
 
+    # ⚠️ rien à ajouter ici si ton cycle est déjà défini au-dessus
 
-
-def _maybe_use_conset_stage1(bot: Botting) -> Generator:
-    if SET.use_conset_stage1:
-        bot.Multibox.UseAllConsumables()
-    yield
-
-
-
-
-def _maybe_use_summon_stage2(bot: Botting) -> Generator:
-    if SET.use_summon_stage2:
-        PopLegionnary()
-    yield
-
-
-
-def _maybe_use_summon_stage1(bot: Botting) -> Generator:
-    if SET.use_summon_stage1:
-        PopLegionnary()
-    yield
-
-
-
-def _maybe_use_conset_stage2(bot: Botting) -> Generator:
-    if SET.use_conset_stage2:
-        bot.Multibox.UseAllConsumables()
-    yield
-
-
-
-
-
-
+    bot.States.AddCustomState(_loop_dungeon_cycle, "Loop Dungeon Cycle")
 
 def EnterDungeon(bot: Botting):
     bot.States.AddHeader("Enter")
@@ -533,16 +577,13 @@ def EnterDungeon(bot: Botting):
 def FirstLevel(bot: Botting):
     bot.States.AddHeader("First Level")
 
-    # 🔹 Consommables / Summon (toujours présents)
-    bot.States.AddCustomState(
-     _maybe_use_conset_stage1,
-    "Stage 1 – Conset (conditional)"
-)
+    if SET.use_conset_stage1:
+        bot.States.AddCustomState(
+            bot.Multibox.UseAllConsumables(),
+            "Use Conset Stage 1"
+        )
+        bot.States.AddCustomState(_maybe_use_summon_stage1, "Summon Legionnary")
 
-    bot.States.AddCustomState(
-     _maybe_use_summon_stage1,
-    "Stage 1 – Legionnaire (conditional)"
-    )
     def follow_and_bless(path):
         bot.Templates.Multibox_Aggressive()
         bot.Move.FollowAutoPath(path)
@@ -555,6 +596,8 @@ def FirstLevel(bot: Botting):
         (18092.0, 4315.0),
         (19045.95, 7877.0),
     ])
+
+
 
     # --- Segment 1 (split wait)
     bot.Templates.Multibox_Aggressive()
@@ -588,18 +631,14 @@ def FirstLevel(bot: Botting):
 
 def SecondLevel(bot: Botting):
     bot.States.AddHeader("Second Level")
-
+    bot.States.AddCustomState(_maybe_use_summon_stage1, "Summon Legionnary")  
     # 🔹 Consommables / Summon (toujours présents)
-    bot.States.AddCustomState(
-    _maybe_use_conset_stage2,
-    "Stage 2 – Conset (conditional)"
-)
-
-    bot.States.AddCustomState(
-    _maybe_use_summon_stage2,
-    "Stage 2 – Legionnaire (conditional)"
-)
-
+    if SET.use_conset_stage2:
+        bot.States.AddCustomState(
+            bot.Multibox.UseAllConsumables(),
+            "Use Conset Stage 2"
+        )
+      
 
     def follow_and_bless(path):
         bot.Templates.Multibox_Aggressive()
@@ -681,7 +720,7 @@ def SecondLevel(bot: Botting):
     # =========================
     # Move to door lever / signpost
     bot.Interact.WithGadgetAtXY(17922.0, -6241)
-
+    bot.States.AddCustomState(_maybe_use_summon_stage2, "Summon Legionnary")
     # =========================
     # Segment 4 — Chemin vers le boss
     # =========================
@@ -724,7 +763,7 @@ def SecondLevel(bot: Botting):
 def TakeQuestandEnter(bot: Botting):
     bot.States.AddHeader("Re-take quest")
     bot.States.AddCustomState(
-    lambda: _take_or_retake_quest(bot),
+    lambda: _take_quest(bot),
     "Take/retake quest (Tekks)"
 )
     bot.States.AddHeader("Next Run - Enter Dungeon")
@@ -735,6 +774,7 @@ def TakeQuestandEnter(bot: Botting):
 
 def Sparkly(bot: Botting):
     bot.States.AddHeader("Go to Tekks")
+
     path = [
     (-8933.0, -18909.0),
     (-10361.0, -16332.0),
@@ -762,6 +802,7 @@ def Sparkly(bot: Botting):
     ]
     
     bot.Templates.Multibox_Aggressive()
+
     bot.Move.FollowAutoPath(path)
     bot.Wait.UntilOutOfCombat()
 
@@ -769,7 +810,7 @@ def Sparkly(bot: Botting):
     bot.Dialogs.AtXY(x, y, DWARVEN_BLESSING_DIALOG, "Get Blessing")
     # --- Tekks ---
     bot.States.AddCustomState(
-    lambda: _take_or_retake_quest(bot),
+    lambda: _take_quest(bot),
     "Take/retake quest (Tekks)"
 )
 
