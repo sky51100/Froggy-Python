@@ -3,7 +3,7 @@ from __future__ import annotations
 from Py4GWCoreLib import (Routines,Botting,ActionQueueManager)
 import os
 import time
-from typing import Generator, List, Tuple, Optional
+from typing import Generator, List, Self, Tuple, Optional
 from collections import deque
 
 LOG_BUFFER = deque(maxlen=200)  # 200 lignes max
@@ -358,14 +358,14 @@ def _draw_settings(bot: Botting):
             "Use Summoning Stone - Stage 2",
             SET.use_summon_stage2
         )
-#    SET.use_conset_stage1 = ImGui.checkbox(
-#            "Use Conset - Stage 1",
-#            SET.use_conset_stage1
-#        )
-#    SET.use_conset_stage2 = ImGui.checkbox(
-#            "Use Conset - Stage 2",
-#            SET.use_conset_stage2
-#       )
+    SET.use_conset_stage1 = ImGui.checkbox(
+            "Use Conset - Stage 1",
+            SET.use_conset_stage1
+        )
+    SET.use_conset_stage2 = ImGui.checkbox(
+            "Use Conset - Stage 2",
+            SET.use_conset_stage2
+       )
 
 
 
@@ -514,6 +514,23 @@ def _maybe_use_summon_stage1() -> Generator:
     
     yield
 
+
+
+def _maybe_use_conset_stage1() -> Generator:
+    if SET.use_conset_stage1:
+        bot.Multibox.UseAllConsumables()
+        yield from Routines.Yield.wait(300)
+        Log("Conset Stage 1: Conset USED")
+    yield
+
+def _maybe_use_conset_stage2() -> Generator:
+    if SET.use_conset_stage2:
+        bot.Multibox.UseAllConsumables()
+        yield from Routines.Yield.wait(300)
+        Log("Conset Stage 2: Conset USED")
+    yield
+
+
 # ---------------------------------------------------------------------------
 # Main Routine builder
 # ---------------------------------------------------------------------------
@@ -555,11 +572,8 @@ def EnterDungeon(bot: Botting):
 def FirstLevel(bot: Botting):
     bot.States.AddHeader("First Level")
 
-    if SET.use_conset_stage1:
-        bot.States.AddCustomState(
-            bot.Multibox.UseAllConsumables(),
-            "Use Conset Stage 1"
-        )
+    bot.States.AddCustomState(_maybe_use_conset_stage1, "Use Conset Stage 1")
+
     bot.States.AddCustomState(_maybe_use_summon_stage1, "Summon Legionnary")
 
     def follow_and_bless(path):
@@ -613,10 +627,11 @@ def _open_door() -> Generator:
     yield
 
 def _open_bogroot_chest() -> Generator:
-    bot.Interact.WithGadgetAtXY(17922.0, -6241)
+    bot.Interact.WithGadgetAtXY(14982.66, -19122)
     yield from Routines.Yield.wait(300)
-    Log("Door Lever: interacted to open the boss door")
+    Log("Chest: interaction executed")
     yield
+
  
 
 
@@ -624,11 +639,8 @@ def SecondLevel(bot: Botting):
     bot.States.AddHeader("Second Level")
     bot.States.AddCustomState(_maybe_use_summon_stage1, "Summon Legionnary")  
     # 🔹 Consommables / Summon (toujours présents)
-    if SET.use_conset_stage2:
-        bot.States.AddCustomState(
-            bot.Multibox.UseAllConsumables(),
-            "Use Conset Stage 2"
-        )
+    bot.States.AddCustomState(_maybe_use_conset_stage2, "Use Conset Stage 2")
+
       
 
     def follow_and_bless(path):
@@ -794,7 +806,7 @@ def Sparkly(bot: Botting):
     ]
     
     bot.Templates.Multibox_Aggressive()
-
+    bot.States.AddCustomState(_maybe_use_conset_stage1, "Use Conset Stage 1")
     bot.Move.FollowAutoPath(path)
     bot.Wait.UntilOutOfCombat()
 
