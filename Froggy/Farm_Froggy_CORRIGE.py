@@ -358,14 +358,14 @@ def _draw_settings(bot: Botting):
             "Use Summoning Stone - Stage 2",
             SET.use_summon_stage2
         )
-    SET.use_conset_stage1 = ImGui.checkbox(
-            "Use Conset - Stage 1",
-            SET.use_conset_stage1
-        )
-    SET.use_conset_stage2 = ImGui.checkbox(
-            "Use Conset - Stage 2",
-            SET.use_conset_stage2
-        )
+#    SET.use_conset_stage1 = ImGui.checkbox(
+#            "Use Conset - Stage 1",
+#            SET.use_conset_stage1
+#        )
+#    SET.use_conset_stage2 = ImGui.checkbox(
+#            "Use Conset - Stage 2",
+#            SET.use_conset_stage2
+#       )
 
 
 
@@ -500,12 +500,6 @@ def _loop_dungeon_cycle(bot: Botting) -> Generator:
 
     yield
 
-def _use_conset() -> Generator:
-    Log("Conset: executing UseAllConsumables()")
-    bot.Multibox.UseAllConsumables()
-    yield
-
-
 def _maybe_use_summon_stage2() -> Generator:
     if SET.use_summon_stage2 == True :
  
@@ -518,22 +512,6 @@ def _maybe_use_summon_stage1() -> Generator:
         PopLegionnary()
         Log("Stone Stage 1: Legionnary Summon USED")
     
-    yield
-
-def _maybe_use_conset_stage1() -> Generator:
-    if SET.use_conset_stage1:
-        Log("Conset Stage 1: USED")
-        yield from _use_conset()
-    else:
-        Log("Conset Stage 1: SKIPPED")
-    yield
-
-
-
-def _maybe_use_conset_stage2() -> Generator:
-    if SET.use_conset_stage2 == True :
-        Log("Conset Stage 2: USED (direct inventory)")
-        bot.Multibox.UseAllConsumables()
     yield
 
 # ---------------------------------------------------------------------------
@@ -628,6 +606,19 @@ def FirstLevel(bot: Botting):
     ])
     bot.Wait.UntilOutOfCombat()
 
+def _open_door() -> Generator:
+    bot.Interact.WithGadgetAtXY(14982.66, -19122)
+    yield from Routines.Yield.wait(300)
+    Log("Chest: interacted to open the Bogroot chest")
+    yield
+
+def _open_bogroot_chest() -> Generator:
+    bot.Interact.WithGadgetAtXY(17922.0, -6241)
+    yield from Routines.Yield.wait(300)
+    Log("Door Lever: interacted to open the boss door")
+    yield
+ 
+
 
 def SecondLevel(bot: Botting):
     bot.States.AddHeader("Second Level")
@@ -719,7 +710,7 @@ def SecondLevel(bot: Botting):
     # Ouverture de la porte
     # =========================
     # Move to door lever / signpost
-    bot.Interact.WithGadgetAtXY(17922.0, -6241)
+    bot.States.AddCustomState(_open_door, "Open Door")
     bot.States.AddCustomState(_maybe_use_summon_stage2, "Summon Legionnary")
     # =========================
     # Segment 4 — Chemin vers le boss
@@ -756,9 +747,10 @@ def SecondLevel(bot: Botting):
     # Coffre de fin
     # =========================
     # Approche du coffre Bogroot
-    bot.Interact.WithGadgetAtXY(14982.66, -19122)
-
-
+    bot.States.AddCustomState(
+    _open_bogroot_chest,
+    "Open Bogroot Chest"
+)
 
 def TakeQuestandEnter(bot: Botting):
     bot.States.AddHeader("Re-take quest")
