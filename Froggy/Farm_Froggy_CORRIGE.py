@@ -84,8 +84,8 @@ class _Settings:
         self.hard_mode = False
         self.use_summon_stage1 = True
         self.use_summon_stage2 = True
-        self.use_conset_stage1 = True
-        self.use_conset_stage2 = True
+        self.use_conset_stage1 = False
+        self.use_conset_stage2 = False
 
 SET = _Settings()
 SCRIPT_RUNNING = False
@@ -582,7 +582,7 @@ def FirstLevel(bot: Botting):
             bot.Multibox.UseAllConsumables(),
             "Use Conset Stage 1"
         )
-        bot.States.AddCustomState(_maybe_use_summon_stage1, "Summon Legionnary")
+    bot.States.AddCustomState(_maybe_use_summon_stage1, "Summon Legionnary")
 
     def follow_and_bless(path):
         bot.Templates.Multibox_Aggressive()
